@@ -64,21 +64,21 @@ GRAPHIC = False
 
 bands = ['U', 'B', 'V', 'R', 'I', 'r', 'i', 'H', 'J', 'K']  # CfA survey bands, this list is the default "all bands" choice
 mycolors = {'U': 'k', 
-            'B': '# 0066cc', 
-            'V': '# 47b56c', 
-            'R': '# b20000', 
+            'B': '#0066cc', 
+            'V': '#47b56c', 
+            'R': '#b20000', 
             'I': 'm', 
-            'r': '# b20000', 
+            'r': '#b20000', 
             'i': 'm', 
-            'J': '# 9999EE', 
-            'H': '# FF77AA', 
-            'K': '# 6BB5FF'}
+            'J': '#9999EE', 
+            'H': '#FF77AA', 
+            'K': '#6BB5FF'}
 
 
 flagbadfit, flagmissmax, flagmiss15 = 0, 0, 0
 
 output = "tmp.dat"
-logoutput = open(output, 'a')
+#logoutput = open(output, 'a')
 
 
 def print2log(message):
@@ -504,7 +504,7 @@ Make sure you all points within a range: partial selection and exclusion of indi
                     
                 if DEBUG:
                     print("Selected points:")
-                print(xys, done)
+                    print(xys, done)
 
                 lcv = np.array(list(zip(lc['mjd'], lc['mag'])))
                 jj = 0
@@ -622,7 +622,11 @@ Make sure you all points within a range: partial selection and exclusion of indi
             # you have extra datapoints at the edges of the region you selected
             nmc = max(Nboot, 200)
             for nb in range(nmc):
-                print ('{0}/{1}\r'.format(nb, nmc),)
+                try:
+                    print ('{0}/{1}\r'.format(nb, nmc), end='\r', flush=True)
+                except TypeError:  # python 3.x
+                    sys.stdout.write('{0}/{1}\r'.format(nb, nmc))
+                    sys.stdout.flush()
                 # sys.stdout.flush()
                 print2log("mindate %f, maxdate %f " % (mindate, maxdate))
                 if CUT:
@@ -736,8 +740,10 @@ Make sure you all points within a range: partial selection and exclusion of indi
                     print ("########### could not find maximum. moving on ##########")
                     print2log("dm15 FAILED!!")
                     continue
-                print2log("\n\nSummary %f %f %f %f \n\n" % (maxflux, maxjd,
-                                                            np.sum(resids*resids) / (ndata-solution['deg']), rchisq))
+                print2log("\n\nSummary %f %f %f %f \n\n" %
+                          (maxflux, maxjd,
+                           np.sum(resids*resids) / (ndata-solution['deg']),
+                           rchisq))
                 redo = 0
                 
                 maxs.append(maxflux)
@@ -749,11 +755,11 @@ Make sure you all points within a range: partial selection and exclusion of indi
                 ax.plot(x+0.5, y, 'o', alpha=0.1, color='k')
                 ax.plot(xp+0.5, solution['sol'](xp+0.5), '-', color = "k", alpha = 0.1)
             try:    
-                print (fboot, f+" max jd in band "+b+": 24%f %.2f " % (maxjd+50000.50000, maxflux))
+                print (fboot, f+" max mjd in band "+b+": %f %.2f " % (maxjd+50000.0000, maxflux))
             except:
                 pass
       
-        dm15 = np.nanmean(d15s)  # maxflux-solution['sol'](maxjd+15.0)    
+        dm15 = np.median(d15s)  # maxflux-solution['sol'](maxjd+15.0)    
         ax.plot(lc['mjd'] + 0.5 - subtract, lc['mag'], 'o', color=mycolors[b])
         ax.errorbar(lc['mjd'] + 0.5 - subtract, lc['mag'], yerr=lc['dmag'], 
                     fmt = None, ecolor=mycolors[b])
@@ -763,66 +769,109 @@ Make sure you all points within a range: partial selection and exclusion of indi
         # myplot_setlabel
         ax.set_xlabel('MJD - 50000.00')
         ax.set_ylabel(b + ' mag')  # , title = snname+' '+b, ax = ax)
+        medianmjdmax = np.median(mjdmaxs)
+
+        mjdpercentiles = np.percentile(mjdmaxs, [25,75])
+        
+        if not isinstance(medianmjdmax, float):
+            medianmjdmax = medianmjdmax[0]
+
+        ax.arrow(medianmjdmax, np.median(maxs) + 0.5, 0,
+                 -0.2, head_width=0.5, head_length=0.05,
+                 fc='k', ec='k')
+        ax.plot(mjdpercentiles, [np.median(maxs) + 0.5, np.median(maxs) + 0.5],
+                'k-')
+        
         pl.title(" %s skip = %d use = %d" % (snname, options.sp, options.np))
         try: 
-            if len(np.mean(mjdmaxs)) > 1:
-                pl.text(0.58, 0.80, (r'$JD_\mathrm{max}$: 24%.2f (%.2f)' % ((np.mean(mjdmaxs) + subtract + .5)[0], np.std(mjdmaxs))), 
-                        ha = 'left', fontsize = 17, 
-                        transm = myfig.transFigure)
+            if len(medianmjdmax) > 1:
+                pl.text(0.50, 0.70, (r'$JD_\mathrm{max}$: 24%.2f (%.2f)' %
+                                     (medianmjdmax + subtract + .5,
+                                      np.std(mjdmaxs))), 
+                        ha='left', fontsize=17, 
+                        transm=myfig.transFigure)
         except:   # missing exception :-(
-            pl.text(0.58, 0.80, 
-                    (r'$JD_\mathrm{max}$: 24%.2f (%.2f)' % (np.mean(mjdmaxs) +
-                                                            subtract + .5,
+            pl.text(0.50, 0.70, 
+                    (r'$MJD_\mathrm{max}$: %.2f (%.2f)' % (medianmjdmax +
+                                                            subtract,
                                                             np.std(mjdmaxs))), 
                     ha = 'left', fontsize = 17, transform = myfig.transFigure)
 
-        finaloutput.write("skipped %d used %d" % (options.sp, options.np))
+        finaloutput.write("skipped %d used %d\n" % (options.sp, options.np))
         print ("\n\nskipped %d used %d" % (options.sp, options.np))
         try:
-            finaloutput.write('JD_max, 24%.2f (%.2f)' % ((np.mean(mjdmaxs) +
-                                                          subtract+.5)[0], 
+            finaloutput.write('JD_max, 24%.2f (%.2f)\n' % ((medianmjdmax +
+                                                          subtract + .5), 
                                                          np.std(mjdmaxs)[0]))
-            finaloutput.write('MJD_max: 5%.2f %.2f ' % (np.mean(mjdmaxs)[0], 
-                                                        np.std(mjdmaxs)[0]))
+            finaloutput.write('MJD_max: 5%.2f %.2f\n' % ((medianmjdmax +
+                                                        np.std(mjdmaxs))[0]))
             
-            finaloutput.write('M_max: %.2f %.2f ' % (np.mean(maxs)[0], 
+            finaloutput.write('M_max: %.2f %.2f\n' % (np.median(maxs)[0], 
                                                      np.std(maxs)[0]))
-            print ('JD_max, 24%.2f (%.2f)' % ((np.mean(mjdmaxs) +
-                                               subtract + .5)[0], 
+            print ('JD_max, 24%.2f (%.2f)' % ((medianmjdmax +
+                                               subtract + .5), 
                                               np.std(mjdmaxs)[0]))
-            print ('MJD_max: 5%.2f %.2f ' % (np.mean(mjdmaxs)[0], 
+            print ('MJD_max: 5%.2f %.2f ' % (medianmjdmax, 
                                              np.std(mjdmaxs)[0]))
-            print ('M_max: %.2f %.2f ' % (np.mean(maxs)[0], 
+            print ('M_max: %.2f %.2f ' % (np.median(maxs)[0], 
                                           np.std(maxs)[0]))
             
         except:
-            finaloutput.write('JD_max: 24%.2f %.2f ' % (np.mean(mjdmaxs) +
-                                                        subtract+.5, 
+            finaloutput.write('JD_max: 24%.2f %.2f\n' % (medianmjdmax +
+                                                        subtract + .5, 
                                                         np.std(mjdmaxs)))
-            finaloutput.write('MJD_max: 5%.2f %.2f ' % (np.mean(mjdmaxs), 
-                                                        np.std(mjdmaxs)))
+            finaloutput.write('JD precentiles 25th: 24{0:.2f} 75th: 24{1:.2f}\n'.\
+                              format(*mjdpercentiles + subtract + .5))
+
+            finaloutput.write('MJD_max: 5%.2f %.2f\n' % (medianmjdmax, 
+                                                np.std(mjdmaxs)))
+            finaloutput.write('MJD precentiles 25th: {0:.2f} 75th:{1:.2f}\n'.\
+                              format(*mjdpercentiles))
+
             
-            finaloutput.write('M_max: %.2f %.2f ' % (np.mean(maxs), 
+            finaloutput.write('M_max: %.2f %.2f\n' % (np.median(maxs), 
                                                      np.std(maxs)))
-            print ('JD_max: 24%.2f %.2f ' % (np.mean(mjdmaxs) +
+
+            
+            finaloutput.write('M_max percentiles 25th: {0:.2f} 75th:{1:.2f}\n'.\
+                              format(*np.percentile(maxs,
+                                            [25,75])))
+            
+            print ('JD_max: 24%.2f %.2f ' % (medianmjdmax +
                                              subtract + .5, 
                                              np.std(mjdmaxs)))
-            print ('MJD_max: 5%.2f %.2f ' % (np.mean(mjdmaxs), 
+            print ('MJD_max: 5%.2f %.2f ' % (medianmjdmax, 
                                              np.std(mjdmaxs)))
             
-            print ('M_max: %.2f %.2f ' % (np.mean(maxs), 
+            print ('M_max: %.2f %.2f ' % (np.median(maxs), 
                                           np.std(maxs)))
+            print('JD precentiles 25th: 24{0:.2f} 75th: 24{1:.2f}'.\
+                              format(*mjdpercentiles +
+                                     subtract + .5))
             
-            pl.text(0.58, 0.85, (r'$M_\mathrm{max}$: %.2f (%.2f)' %
-                                 (np.mean(maxs), 
+            print('MJD_max: 5%.2f %.2f ' % (medianmjdmax, 
+                                            np.std(mjdmaxs)))
+            print('MJD precentiles 25th: {0:.2f} 75th:{1:.2f}'.\
+                              format(*mjdpercentiles))
+            
+            
+            print('M_max: %.2f %.2f ' % (np.median(maxs), 
+                                                     np.std(maxs)))
+            
+            
+            print('M percentiles 25th: {0:.2f} 75th:{1:.2f}'.\
+                              format(*np.percentile(maxs,
+                                [25,75])))
+            pl.text(0.50, 0.75, (r'$M_\mathrm{max}$: %.2f (%.2f)' %
+                                 (np.median(maxs), 
                                   np.std(maxs))), 
                     ha = 'left', fontsize = 17, transform = myfig.transFigure)
-            pl.text(0.58, 0.75, (r'$\Delta m_{15}$: %.2f (%.2f)' %
+            pl.text(0.50, 0.65, (r'$\Delta m_{15}$: %.2f (%.2f)' %
                                  (-dm15, np.std(d15s))), 
                     ha = 'left', fontsize = 17, transform = myfig.transFigure)
             
             try:
-                finaloutput.write('dm15 : %.2f %.2f' % (-dm15, np.std(d15s)))
+                finaloutput.write('dm15 : %.2f %.2f\n' % (-dm15, np.std(d15s)))
                 print('dm15 : %.2f %.2f\n\n' % (-dm15, np.std(d15s)))
             except:
                 pass
