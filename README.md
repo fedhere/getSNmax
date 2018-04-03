@@ -20,3 +20,5 @@ We enable the selection of the search region by stating how many datapoints have
 The code does not require installation. It reads in the photometry as an ascii file, or using the SESNCfA library if it is set-up.
 
 An example of the result of the code is below: the code prints the results to file, and plots the realizations, the fits, reporting the results on the plot.
+
+[SN 2009ik](https://github.com/fedhere/getSNmax/plots/sn09ikV.png)
