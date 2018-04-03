@@ -29,8 +29,20 @@ Below is the output of our code when run for sn09ik on a local file *n2009iz.V.d
 python getmaxdate_boot_v2.py sn2009iz.V.dat -t 0 -m 2 -d 3 -b V -s 10 -n 6
 ```
 
-![sn09ik V band](https://user-images.githubusercontent.com/1696902/38223375-7850bbaa-36e2-11e8-95ce-3fa46b775b63.png)
+![sn09iz V band](https://user-images.githubusercontent.com/1696902/38223375-7850bbaa-36e2-11e8-95ce-3fa46b775b63.png)
 
+The code also saves the output in sn2009iz.V.dat_V_s6_n14.dat in the local folder
+
+```
+skipped 6 used 14
+JD_max: 2455109.87 0.45
+JD precentiles 25th: 2455109.45 75th: 2455110.08
+MJD_max: 55109.37 0.45
+MJD precentiles 25th: 5108.95 75th:5109.58
+M_max: 17.02 0.02
+M_max percentiles 25th: 16.99 75th:17.03
+dm15 : 0.51 0.08
+```
 
 If I am not familiar with the lightcurve, running the code as 
 
