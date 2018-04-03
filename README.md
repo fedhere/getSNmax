@@ -59,7 +59,7 @@ and here is a video showing how to run the code with the graphical selection of 
 
 ![getsnmax](https://user-images.githubusercontent.com/1696902/38223315-3d371c3a-36e2-11e8-8784-77c2245bf59d.gif)
 
-The video above shows the equivalent of running the code as 
+The video above shows what happens when you run the code as 
 
 ```
 python getmaxdate_boot_v2.py 09mk --lit --loadlc -t 0 -m 2 -d 3 -b V -g 
