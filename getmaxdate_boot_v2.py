@@ -37,10 +37,13 @@ mpl.rcParams['xtick.labelsize'] = 21.
 mpl.rcParams['ytick.labelsize'] = 21.
 
 # add CfA lib folder to path
-cmd_folder = os.path.realpath(os.getenv("SESNCFAlib"))
+CFALIB = False
+if os.getenv("SESNCFAlib"):
+    CFALIB = True    
+    cmd_folder = os.path.realpath(os.getenv("SESNCFAlib"))
 
-if cmd_folder not in sys.path:
-    sys.path.insert(0, cmd_folder)
+    if cmd_folder not in sys.path:
+        sys.path.insert(0, cmd_folder)
 
 
 try:
@@ -209,7 +212,7 @@ def checkfit(y, yfit, closenough):
             b[s] = 1
     except:
         s = []
-    ngood = len(y)-len(s)
+    ngood = len(y) - len(s)
     if ngood < 10:
         print2log("too few good points left")
         return (2, sig, 0)
@@ -384,6 +387,9 @@ if __name__ == '__main__':
         fboot = f.replace('.dat', '.boot')
 
     if options.loadlc:
+        if not CFALIB:
+            print("cannot use this option without the SESNcfalib")
+            sys.exit()
         from snclasses import *
         f = args[0]  # +"*[cf]")
         print (args[0])
@@ -482,7 +488,7 @@ if __name__ == '__main__':
                 pl.show()
 
                 try:
-                    options.np = int(raw_input('how many datapoints should we use?'))
+                    options.np = int(raw_input('how many datapoints should we use?\n'))
                 except ValueError:
                     print ("Not a number")
                     sys.exit()
@@ -496,7 +502,7 @@ if __name__ == '__main__':
                 
                 raw_input('''Select the points to be fit by drawing a circle around them with the mouse. 
 Then press any key to accept selected points.
-Make sure you all points within a range: partial selection and exclusion of individual datapoints is not allowed (and weird things may happen).''')
+Make sure you all points within a range: partial selection and exclusion of individual datapoints is not allowed (and weird things may happen).\n''')
                 
                 xys = selector.xys[selector.ind]
                 for xy in xys:
@@ -519,7 +525,7 @@ Make sure you all points within a range: partial selection and exclusion of indi
             if options.np < len(lc['mag']) and not GRAPHIC:
         
                 try:
-                    options.sp = int(raw_input('how many datapoints should we skip?'))
+                    options.sp = int(raw_input('how many datapoints should we skip?\n'))
                 except ValueError:
                     print ("Not a number")
                     options.sp = 0
@@ -908,4 +914,4 @@ Make sure you all points within a range: partial selection and exclusion of indi
                            (snname.replace('SN ', 'sn'), b, nb)))     
             pl.show()
             if GRAPHIC:
-                raw_input("press any key to kill")
+                raw_input("press any key to kill\n")
