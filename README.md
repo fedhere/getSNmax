@@ -20,3 +20,88 @@ We enable the selection of the search region by stating how many datapoints have
 The code does not require installation. It reads in the photometry as an ascii file, or using the SESNCfA library if it is set-up.
 
 An example of the result of the code is below: the code prints the results to file, and plots the realizations, the fits, reporting the results on the plot.
+
+here is an example of a well sampled lightcurve that however has a gap near peak. Our method finds the peak and associated uncertainty
+
+Below is the output of our code when run for sn09ik on a local file *n2009iz.V.dat* which has mjd on the 0-th column, magnitude on the second, and uncertainty on the third column, and for which I want to skio 10 datapoints and use 6. 
+
+```
+python getmaxdate_boot_v2.py sn2009iz.V.dat -t 0 -m 2 -d 3 -b V -s 10 -n 6
+```
+
+![sn09iz V band](https://user-images.githubusercontent.com/1696902/38223375-7850bbaa-36e2-11e8-95ce-3fa46b775b63.png)
+
+The code also saves the output in sn2009iz.V.dat_V_s6_n14.dat in the local folder
+
+```
+skipped 6 used 14
+JD_max: 2455109.87 0.45
+JD precentiles 25th: 2455109.45 75th: 2455110.08
+MJD_max: 55109.37 0.45
+MJD precentiles 25th: 5108.95 75th:5109.58
+M_max: 17.02 0.02
+M_max percentiles 25th: 16.99 75th:17.03
+dm15 : 0.51 0.08
+```
+
+If I am not familiar with the lightcurve, running the code as 
+
+```
+python getmaxdate_boot_v2.py sn2009iz.V.dat -t 0 -m 2 -d 3 -b V -s 10 -n 6
+```
+would first show me the lightcurve and ask:
+
+```
+how many datapoints should we use? 
+>10
+how many datapoints should we skip? 
+>6
+```
+
+where 10 and 6 would be my inputs.
+
+
+In the plot, the datapoints and uncertainties are shown in color (green for V band; the argument -b followed by the name of the band sets the color. See the code for available bands and colors). The realizations and fits are shown in black and a black arrow indictes the location of the median maximum epoch. At thr bases of the arrow a horizontal bar indicates the interquartile range of the maximum epoch distribution.
+
+Below is an evenly, sparsely sampled lightcurve, sn2009mk V band, with high, probably overestimated uncertainties (since the scatter is not as large as the uncertainties would lead you to expect)
+
+![sn09mk V band](https://user-images.githubusercontent.com/1696902/38223379-7a0969b0-36e2-11e8-8857-d1e7237159ff.png)
+
+and here is a video showing how to run the code with the graphical selection of the fit region (which is triggered by running the code with the online opion -g, or --graphic, or by changing the boolean variable GRAPHIC to True in the code)
+
+![getsnmax](https://user-images.githubusercontent.com/1696902/38223315-3d371c3a-36e2-11e8-8784-77c2245bf59d.gif)
+
+The video above shows what happens when you run the code as 
+
+```
+python getmaxdate_boot_v2.py 09mk --lit --loadlc -t 0 -m 2 -d 3 -b V -g 
+```
+
+which is equivalent to running it as 
+
+```
+python getmaxdate_boot_v2.py 09mk --lit --loadlc -t 0 -m 2 -d 3 -b V -g -n 6 -s 3
+``` 
+if you know ahead of time that you want to skio 3 and use the following 6 datapoints.
+
+```
+python getmaxdate_boot_v2.py --help
+Usage: python getmaxdate_boot.py [snname or filename if not --loadlc] -t # -m # -d # 
+
+Options:
+  -h, --help            show this help message and exit
+  -t TIMECOL, --timecol=TIMECOL
+                        time column (start w 0th)
+  -m MAGCOL, --magcol=MAGCOL
+                        mag column
+  -d DMAGCOL, --dmagcol=DMAGCOL
+                        dmag column
+  -n NP, --np=NP        number of datapoints
+  -s SP, --sp=SP        number of datapoints to skip
+  -g, --graphic         selecting the portion of the lightcurve to use
+                        geraphically with python widgets
+  -l, --loadlc          load from cfa photometry file (you can omit file name)
+  --lit                 load from literature cfa formatted photometry file
+                        (you can omit file name)
+  -b BAND, --band=BAND  photometric band, needed with loadlc
+  ```
