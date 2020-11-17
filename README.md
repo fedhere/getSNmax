@@ -47,7 +47,7 @@ dm15 : 0.51 0.08
 If I am not familiar with the lightcurve, running the code as 
 
 ```
-python getmaxdate_boot_v2.py sn2009iz.V.dat -t 0 -m 2 -d 3 -b V -s 10 -n 14
+python getmaxdate_boot_v2.py sn2009iz.V.dat -t 0 -m 2 -d 3 -b V -s 6 -n 14
 ```
 would first show me the lightcurve and ask:
 
