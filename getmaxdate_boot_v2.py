@@ -45,7 +45,6 @@ if os.getenv("SESNCFAlib"):
     if cmd_folder not in sys.path:
         sys.path.insert(0, cmd_folder)
 
-
 try:
     raw_input
 except NameError:
@@ -701,10 +700,14 @@ Make sure you all points within a range: partial selection and exclusion of indi
 
                 # collapsing array of solution to the one that has reduced chisq closest to 1
                 sol = np.where(abs(np.array(rchis) - 1) == np.min(abs(np.array(rchis) - 1)))[0]
+                
                 if len(sol) > 1: 
                     sol = sol[0]
                     print ("WARNING: some fits are equivalent. very suspicious")
                     print2log("WARNING: some fits are equivalent. very suspicious")
+                else:
+                    sol = sol[0]
+                    
                 solution = solutions[sol]
                 rchisq = rchis[sol]
                 print2log("final chisq: %f" % rchisq)
@@ -768,7 +771,7 @@ Make sure you all points within a range: partial selection and exclusion of indi
         dm15 = np.median(d15s)  # maxflux-solution['sol'](maxjd+15.0)    
         ax.plot(lc['mjd'] + 0.5 - subtract, lc['mag'], 'o', color=mycolors[b])
         ax.errorbar(lc['mjd'] + 0.5 - subtract, lc['mag'], yerr=lc['dmag'], 
-                    fmt = None, ecolor=mycolors[b])
+                    fmt = 'none', ecolor=mycolors[b])
         pl.ylim(max(lc['mag']) + 0.2, min(lc['mag']) - 0.2)            
         pl.xlim(min(lc['mjd']) - 2 - subtract, max(lc['mjd']) + 3 - subtract)
         ax.locator_params(tight = True, nbins = 4)
@@ -890,6 +893,8 @@ Make sure you all points within a range: partial selection and exclusion of indi
                 
                 pl.text(0.5, 0.15, snname+' '+b, ha = 'center', fontsize = 17,
                         transform = myfig.transFigure)
+                if not os.path.isdir("bootstrap"):
+                    os.system("mkdir bootstrap")
                 if not options.lit:
                     print ("bootstrap/%s_%s_boot%03d_s%d_n%d.pdf" %
                            (snname.replace('SN ', 'sn'),
@@ -897,18 +902,23 @@ Make sure you all points within a range: partial selection and exclusion of indi
                     myfig.savefig("bootstrap/%s_%s_boot%03d_s%d_n%d.pdf" %
                                   (snname.replace('SN ', 'sn'),
                                    b, nb, options.sp, options.np))
-                os.system("perl %s/pdfcrop.pl %s" %
-                          (os.environ['SESNPATH'],
+                if CFALIB:
+                    print(CFALIB)
+                    os.system("perl %s/"%os.environ['SESNPATH'] +
+                                 "pdfcrop.pl " +
                            "bootstrap/%s_%s_boot%03d_s%d_n%d.pdf" %
                            (snname.replace('SN ', 'sn'),
-                            b, nb, options.sp, options.np)))
+                            b, nb, options.sp, options.np))
             else:
+                if not os.path.isdir("bootstrapPhotLit"):
+                    os.system("mkdir bootstrapPhotLit")                
                 print ("bootstrapPhotLit/%s_%s_boot%03d.png" %
                        (snname.replace('SN ', 'sn'), b, nb))
                 myfig.savefig("bootstrapPhotLit/%s_%s_boot%03d_s%d_n%d.pdf" %
                               (snname.replace('SN ', 'sn'),
                                b, nb, options.sp, options.np))
-                os.system("perl %s/pdfcrop.pl %s" %
+                if CFALIB:
+                    os.system("perl %s/pdfcrop.pl %s" %
                           (os.environ['SESNPATH'],
                            "bootstrapPhotLit/%s_%s_boot%03d.pdf" %
                            (snname.replace('SN ', 'sn'), b, nb)))     
