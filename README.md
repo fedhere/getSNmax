@@ -26,7 +26,7 @@ here is an example of a well sampled lightcurve that however has a gap near peak
 Below is the output of our code when run for sn09ik on a local file *n2009iz.V.dat* which has mjd on the 0-th column, magnitude on the second, and uncertainty on the third column, and for which I want to skio 10 datapoints and use 6. 
 
 ```
-python getmaxdate_boot_v2.py sn2009iz.V.dat -t 0 -m 2 -d 3 -b V -s 10 -n 6
+python getmaxdate_boot_v2.py sn2009iz.V.dat -t 0 -m 2 -d 3 -b V -s 6 -n 14
 ```
 
 ![sn09iz V band](https://user-images.githubusercontent.com/1696902/38223375-7850bbaa-36e2-11e8-95ce-3fa46b775b63.png)
@@ -47,13 +47,13 @@ dm15 : 0.51 0.08
 If I am not familiar with the lightcurve, running the code as 
 
 ```
-python getmaxdate_boot_v2.py sn2009iz.V.dat -t 0 -m 2 -d 3 -b V -s 10 -n 6
+python getmaxdate_boot_v2.py sn2009iz.V.dat -t 0 -m 2 -d 3 -b V -s 6 -n 14
 ```
 would first show me the lightcurve and ask:
 
 ```
 how many datapoints should we use? 
->10
+>14
 how many datapoints should we skip? 
 >6
 ```
