@@ -53,7 +53,7 @@ would first show me the lightcurve and ask:
 
 ```
 how many datapoints should we use? 
->10
+>14
 how many datapoints should we skip? 
 >6
 ```
