@@ -9,6 +9,7 @@ import optparse
 import scipy as sp
 import numpy as np
 import pylab as pl
+import pandas as pd
 
 from scipy import optimize
 from scipy.interpolate import interp1d
@@ -55,16 +56,16 @@ except NameError:
 NITMAX = 20  # max number iterations
 EPS = 1.0E-20  # tollerance
 LN10x2p5 = 5.75646273249  # algebra done ahead of time
+minNboot = 20
 
-
-# use this (True) if you want to bootstrap the edges of the subsample choice for the determination of peak
+# use CUT[LATE] = True if you want to bootstrap the edges of the subsample choice for the determination of peak
 CUT = True  # False # randomely cutting early data points if there are enough
 CUTLATE = True  # False # randomely cutting late data points if there are enough
 SPEEDITUP = True  # looser convergence criteria but faster computing
 DEBUG = False
 GRAPHIC = False
 
-bands = ['U', 'B', 'V', 'R', 'I', 'r', 'i', 'H', 'J', 'K']  # CfA survey bands, this list is the default "all bands" choice
+bands = ['U', 'B', 'V', 'R', 'I', 'r', 'i', 'H', 'J', 'K', "w1", "w2", "m2"]  # CfA survey bands, this list is the default "all bands" choice
 mycolors = {'U': 'k', 
             'B': '#0066cc', 
             'V': '#47b56c', 
@@ -74,20 +75,79 @@ mycolors = {'U': 'k',
             'i': 'm', 
             'J': '#9999EE', 
             'H': '#FF77AA', 
-            'K': '#6BB5FF'}
+            'K': '#6BB5FF',
+            'w1': '#6BB5FF',
+            'w2': '#6BB5FF',
+            'm2': '#6BB5FF'}
+
 
 
 flagbadfit, flagmissmax, flagmiss15 = 0, 0, 0
 
-output = "tmp.dat"
-#logoutput = open(output, 'a')
 
 
 def print2log(message):
     logoutput.write(str(message))
 
 
-class SelectFromCollection(object):
+class SelectFromCollection: 
+    """
+    Select indices from a matplotlib collection using `LassoSelector`.
+
+    Selected indices are saved in the `ind` attribute. This tool fades out the
+    points that are not part of the selection (i.e., reduces their alpha
+    values). If your collection has alpha < 1, this tool will permanently
+    alter the alpha values.
+
+    Note that this tool selects collection objects based on their *origins*
+    (i.e., `offsets`).
+
+    Parameters
+    ----------
+    ax : `~matplotlib.axes.Axes`
+        Axes to interact with.
+    collection : `matplotlib.collections.Collection` subclass
+        Collection you want to select from.
+    alpha_other : 0 <= float <= 1
+        To highlight a selection, this tool sets all selected points to an
+        alpha value of 1 and non-selected points to *alpha_other*.
+    """
+
+    def __init__(self, ax, collection, alpha_other=0.3):
+        self.canvas = ax.figure.canvas
+        self.collection = collection
+        self.alpha_other = alpha_other
+
+        self.xys = collection.get_offsets()
+        self.Npts = len(self.xys)
+
+        # Ensure that we have separate colors for each object
+        self.fc = collection.get_facecolors()
+        if len(self.fc) == 0:
+            raise ValueError('Collection must have a facecolor')
+        elif len(self.fc) == 1:
+            self.fc = np.tile(self.fc, (self.Npts, 1))
+
+        self.lasso = LassoSelector(ax, onselect=self.onselect)
+        self.ind = []
+
+    def onselect(self, verts):
+        path = Path(verts)
+        self.ind = np.nonzero(path.contains_points(self.xys))[0]
+        self.fc[:, -1] = self.alpha_other
+        self.fc[self.ind, -1] = 1
+        self.collection.set_facecolors(self.fc)
+        self.canvas.draw_idle()
+
+    def disconnect(self):
+        self.lasso.disconnect_events()
+        self.fc[:, -1] = 1
+        self.collection.set_facecolors(self.fc)
+        self.canvas.draw_idle()
+
+
+
+class SelectFromCollection2(object):
     """Select indices from a matplotlib collection using `LassoSelector`.
 
     Selected indices are saved in the `ind` attribute. This tool highlights
@@ -117,6 +177,7 @@ class SelectFromCollection(object):
 
         self.xys = collection.get_offsets()
         self.Npts = len(self.xys)
+        print(self.Npts)
 
         # Ensure that we have separate colors for each object
         self.fc = collection.get_facecolors()
@@ -357,7 +418,7 @@ if __name__ == '__main__':
     parser.add_option('-d', '--dmagcol', default=3, type="int", 
                       help='dmag column')
     parser.add_option('-n', '--np', default=0, type='int', 
-                      help='number of datapoints')
+                      help='number of datapoints (n=-1 for all)')
     parser.add_option('-s', '--sp', default=0, type='int', 
                       help='number of datapoints to skip')
     parser.add_option('-g', '--graphic', default=False,
@@ -373,25 +434,41 @@ if __name__ == '__main__':
                       "(you can omit file name)")
     parser.add_option('-b', '--band', default='all', type='string', 
                       help='photometric band, needed with loadlc')
+    parser.add_option('--bandname', default=None, type='string', 
+                      help='photometric name of the photometric band in thte file')
+    parser.add_option('--snname', default=None, type='string', 
+                      help='SN name')
+    parser.add_option('--bandcolumn', default=0, type="int", help='band column')
+    parser.add_option('--separator', default=',', type='string', 
+                       help='column separator, default is ","')
+    parser.add_option('--verbose', default=False, action="store_true",
+                       help='verbose mode')
+
+    
 
     options, args = parser.parse_args()
-    
-    if len(args) != 1 and len(args) != 2:
+    if options.verbose:
+        DEBUG = True
+
+    if DEBUG:
+        print(options)
+    if len(args) != 1 and len(args) != 2: # not enough arguments
         sys.argv.append('--help')  
         options, args = parser.parse_args()
         sys.exit(0)
-    
+
+    #load a file in standard text format (space separated values)
     if not options.loadlc:
         f = args[0]
-        fboot = f.replace('.dat', '.boot')
 
+    # automatically load files from the CfA supernova sample with the CfA supernova library
     if options.loadlc:
-        if not CFALIB:
+        if not CFALIB: # https://github.com/nyusngroup/SESNCfAlib
             print("cannot use this option without the SESNcfalib")
             sys.exit()
         from snclasses import *
         f = args[0]  # +"*[cf]")
-        print (args[0])
+
         if not options.lit:
             f = glob.glob(os.environ["SESNPATH"] +
                           "/finalphot/*"+args[0] + "*.[cf]")[0]
@@ -413,76 +490,143 @@ if __name__ == '__main__':
     
         bandcounter = 1
 
+    # selects the points with graphic interaction
     if options.graphic:
         GRAPHIC = True
     if 'all' not in options.band:      
         bands = options.band
 
-    print ("BANDS: %s" % str(options.band))
-      
+    if not os.path.isdir('logs'):
+        os.mkdir('logs')
+    if not os.path.isdir('outputs'):
+        os.mkdir('outputs')        
+
+
+    print ("BANDS: %s" % options.band)
+    if isinstance(bands, str):
+        bands = [bands]
+
     for b in bands:
         if not options.lit:
             output = f + "_" + b + ".log"
         else:
-            output = f + "_" + b + "_lit.log"    
+            output = f + "_" + b + "_lit.log"
+        
+        if DEBUG: print("output left in", output)
+
         global logoutput 
-        logoutput = open(output, 'a')
+        logoutput = open(os.path.join('logs', output), 'a')
+
 
         print2log("########################################## ")
-        print2log("TIME NOW %f" % time.time())
-    
+        print2log("TIME NOW %f" % time.time())    
         if options.loadlc:
             # uses SESNCfA lib for reading in lcvs
             thissn = mysn(f)
             lc, flux, dflux, snname = thissn.loadsn(f)
             print2log("\n\nSN NAME: %s\n\n" % snname)
             print2log("input file: %s" % f)
-            print ("\n\nSN NAME: \n\n", snname)
-            
-            fboot = snname + '.boot'
+            print ("\n\nSN NAME: \n\n", snname, "\n\n")
+            print ("band:", b)
             thissn.setphot()
             thissn.getphot()
       
             lc = thissn.photometry[b]
             thissn.printsn()
+            lc = pd.DataFrame(lc)
         else:
+
+            usecols = np.array([options.bandcolumn,
+                                options.timecol, 
+                                options.magcol, 
+                                options.dmagcol])
+
+            indx = np.argsort(usecols)
+            names = np.array(['band', 'mjd', 'mag', 'dmag'])
+            formats = np.array(['str', 'float', 'float', 'float'])
+            
             # reads in an ascii file with lcv data
-            snname = f.split("/")[-1].split(".")[0]
+            snname = options.snname
+            
+            if snname is None:
+                snname = f.split("/")[-1].split(".")[0]
+                snname.replace('sn0', 'SN 200')
             print2log("\n\nSN NAME: %s\n\n" % snname)
             print2log("input file: %s" % f)
+            print ("\n\nSN NAME: \n\n", snname, "\n\n")            
+            
+            if DEBUG:
+                print("input file: %s" % f)                
 
-            lc = np.genfromtxt(f, usecols=(options.timecol, 
+            
+            """
+            lc = np.genfromtxt(f, usecols=(options.bandcolumn,
+                                           options.timecol, 
                                            options.magcol, 
                                            options.dmagcol), 
-                               dtype={'names': ('mjd', 'mag', 'dmag'), 
-                                        'formats': ('f8', 'f8', 'f8')})
-            snname = f.split("/")[-1].split('.')[0].replace('sn0', 'SN 200')
+                               dtype={'names': ('band', 'mjd', 'dmag', 'mag'), 
+                                        'formats': ('<S5', 'f8', 'f8', 'f8')},
+                               delimiter=options.separator)
+            """
             
+            lc = pd.read_csv(f, header=None,
+                             sep=options.separator,                             
+                             names=names[indx],
+                             dtype={names[indx][i]:formats[indx][i]
+                                    #'band':'str', 'mjd':float, 'mag':float, 'dmag':float
+                                    for i in range(4)},
+                             usecols=usecols[indx])
+            if DEBUG:
+                print(lc, "bands", bands)
+                
+            #snname = f.split("/")[-1].split('.')[0]
+            
+            if len(bands) == 1:
+                if options.bandname is None:
+                    options.bandname = bands[0]
+                lc = lc[lc['band'] == options.bandname]
+
+        if DEBUG:
+            print(lc)
         # set negative uncertainties to 0 - should not happen but some placeholders are used
-        lc['dmag'][lc['dmag'] == 0] = min(lc['dmag'][lc['dmag'] > 0])
+        #lc['dmag'][lc['dmag'] == 0] = min(lc['dmag'][lc['dmag'] >= 0])
+        lc.loc[lc['dmag'] == 0, 'dmag'] = min(lc.loc[lc['dmag'] > 0, 'dmag'])
 
         # sorting by date if not already
-        indx = np.argsort(lc['mjd'])
-        # print (indx)
-        lc['mjd'] = lc['mjd'][indx]
-        lc['mag'] = lc['mag'][indx]
-        lc['dmag'] = lc['dmag'][indx]
+        #indx = np.argsort(lc['mjd'])
+        #lc['mjd'] = lc['mjd'][indx]
+        #lc['mag'] = lc['mag'][indx]
+        #lc['dmag'] = lc['dmag'][indx]
+        lc.sort_values(by="mjd")
+        lc.reset_index(inplace=True)
+
+        if DEBUG:
+            print(lc)
         if len(lc['mag']) == 0:
             continue
         mindate = maxdate = 0
-        if DEBUG:
-            print (lc)
+        
+        fboot = os.path.join('outputs', snname + '.boot')
+        fboot = fboot.replace('.boot', '_' + b + '.boot')
+      
         if options.np == 0:
             # ask the user to look at the LC and select the number of points to use and skip
-            fboot.replace('.boot', '_' + b + '.boot')
-      
             fig = pl.figure(figsize=(9, 9))
-            ax = fig.add_subplot(111)            
-            pts = ax.scatter(lc['mjd'], lc['mag'], s=10, alpha=0.5)
-            ax.errorbar(lc['mjd'], lc['mag'], yerr=lc['dmag'], fmt='k.')
-            ax.set_ylim(max(lc['mag']) + 0.2, min(lc['mag']) - 0.2)            
+            mjdrange = max(lc['mjd']) - min(lc['mjd'])
+            ax = fig.add_subplot(
+                xlim=(min(lc['mjd']) - mjdrange * 0.05, max(lc['mjd']) + mjdrange * 0.05),
+                ylim=(max(lc['mag']) + 0.2, min(lc['mag']) - 0.2),
+                title='Lasso points using left mouse button')
 
+            pts = ax.scatter(lc['mjd'], lc['mag'], s=20, ###alpha=0.5,
+                             color=mycolors[b])
+            
+ 
             if not GRAPHIC:
+                ax.errorbar(lc['mjd'], lc['mag'], yerr=lc['dmag'],
+                            color=mycolors[b], fmt='.',
+                            alpha=0.3)
+ 
                 pl.draw()
                 pl.show()
 
@@ -494,32 +638,44 @@ if __name__ == '__main__':
 
             else:
                 done = []
-                pl.ion()
                 selector = SelectFromCollection(ax, pts)
-                pl.draw()
+
+                #Make sure you all points are within a range:
+                #partial selection and exclusion of individual datapoints
+                #is not allowed (and weird things may happen).
+                print("Select points in the figure by enclosing them within a polygon. Then press any key to accept selected points, then close the window.")
+                ax.set_title("Select points in the figure by enclosing them within a polygon\n Close this window to accept selected points")
+           
+
+                def accept(event):
+                    if event.key == "enter":
+                        print("Selected points:")
+                        print(selector.xys[selector.ind])
+                        selector.disconnect()
+                        ax.set_title("")
+                        fig.canvas.draw()
+
+                fig.canvas.mpl_connect("key_press_event", accept)
                 pl.show()
-                
-                raw_input('''Select the points to be fit by drawing a circle around them with the mouse. 
-Then press any key to accept selected points.
-Make sure you all points within a range: partial selection and exclusion of individual datapoints is not allowed (and weird things may happen).\n''')
+                selector.disconnect()
                 
                 xys = selector.xys[selector.ind]
-                for xy in xys:
-                    done.append(xy)
-                    
+
+                # After figure is closed print the coordinates of the selected points
+                print('\nSelected points:')
+                                    
                 if DEBUG:
                     print("Selected points:")
-                    print(xys, done)
+                    print(xys)
 
                 lcv = np.array(list(zip(lc['mjd'], lc['mag'])))
                 jj = 0
-                while not (lcv[jj] == done[0]).all():
+                while not (lcv[jj] == xys[0]).all():
                     jj += 1
                 options.sp = jj
                 options.np = len(xys)
-                selector.disconnect()
-            
-            if options.np == 0:
+        
+            if options.np == 0: # no points
                 continue
             if options.np < len(lc['mag']) and not GRAPHIC:
         
@@ -528,15 +684,14 @@ Make sure you all points within a range: partial selection and exclusion of indi
                 except ValueError:
                     print ("Not a number")
                     options.sp = 0
-
-        print ("")
-        # if DEBUG:
-        print ("using", options.np, "skipping", options.sp)
-    
         mindate = options.sp
-        mynp = options.np
-
-        output = output.replace('.log', '_s%d_n%d.dat' % (options.sp, options.np))
+        mynp = options.np if options.np >= 0 else len(lc['mjd'])
+        
+        print ("")
+        print ("using", mynp, "skipping", options.sp)
+    
+        output =  os.path.join('outputs', output.replace('.log', '_s%d_n%d.dat' %
+                                                           (options.sp, options.np)))
         finaloutput = open(output, 'w')
         
         fboot = open(fboot, "w")
@@ -556,7 +711,8 @@ Make sure you all points within a range: partial selection and exclusion of indi
         ndata = len(lc['mjd'])
 
         # testing date format (trivially by comparing w 6e4)
-        if lc['mjd'][0] > 60000: 
+        if lc.loc[0, 'mjd'] > 60_000:
+            #lc['mjd'][0] > 60000: 
             print2log("CAREFUL: date in JD instead of MJD")
             # resetting date to MJD
             lc['mjd'] = lc['mjd'] - 2400000.5
@@ -577,14 +733,14 @@ Make sure you all points within a range: partial selection and exclusion of indi
         # number of bootstrap iterations:
         # number of datapoints * ln(number datapoints)**2 or 200 if it is less than that
         Nboot = mynp
-        print2log("Noot %d" % Nboot)
+        print2log("Nboot %d" % Nboot)
         Nboot = int(Nboot*((np.log(Nboot))**2)+0.5)
 
         # if you are using the whole lightcurve just fit it (does this need a better criterion??)
-        if options.np == len(lc['mag']):
+        if mynp == len(lc['mag']) :
             x = mjd.astype(np.float64) 
-            y = lc['mag'].astype(np.float64)
-            dy = lc['dmag'].astype(np.float64)
+            y = lc['mag'].values.astype(np.float64)
+            dy = lc['dmag'].values.astype(np.float64)
             all, pars, xp = fitit(mjd, y, dy, deg=deg)
             lsq = all[0]
             covar = all[1]
@@ -621,18 +777,19 @@ Make sure you all points within a range: partial selection and exclusion of indi
                     color="k", alpha=0.1)
             # why + 0.5? I forgot
             pl.show()
-            sys.exit()
+
         
         else:
             # you have extra datapoints at the edges of the region you selected
-            nmc = max(Nboot, 200)
+            nmc = max(Nboot, minNboot)
+            nmc = 20
             for nb in range(nmc):
                 try:
                     print ('{0}/{1}\r'.format(nb, nmc), end='\r', flush=True)
                 except TypeError:  # python 3.x
                     sys.stdout.write('{0}/{1}\r'.format(nb, nmc))
                     sys.stdout.flush()
-                # sys.stdout.flush()
+                    
                 print2log("mindate %f, maxdate %f " % (mindate, maxdate))
                 if CUT:
                     # randomely cut earliest two datapoints
@@ -651,7 +808,10 @@ Make sure you all points within a range: partial selection and exclusion of indi
                 print2log("new min %f and max %f %f: " % (newmindate, 
                                                           newmaxdate, mynp))
                 # reset minimum date
-                indx = range(newmindate, mynp + newmindate)
+                indx = np.array(range(newmindate, mynp + newmindate))
+                #print(indx)
+                #needed if all points are included after peak                
+                indx = indx[indx <= mynp] 
                 if len(indx) - newmaxdate >= 3 and not newmaxdate == 0:
                     indx = indx[:-newmaxdate]
                 ndata = len(indx)
@@ -660,13 +820,13 @@ Make sure you all points within a range: partial selection and exclusion of indi
                     print ("ndata too short")
                     continue
 
-                x = mjd[indx]
+                x = mjd[indx].values
                 # randomely sample form each photometry measurement and errorbar in a gaussian
                 y = np.random.normal(lc['mag'][indx], lc['dmag'][indx])
                 x = x.astype(np.float64) 
                 y = y.astype(np.float64)
-                dy = lc['dmag'][indx].astype(np.float64)
-                
+                dy = lc['dmag'][indx].values.astype(np.float64)
+
                 itercount = 1
                 solutions = []
                 rchis = []
@@ -763,69 +923,90 @@ Make sure you all points within a range: partial selection and exclusion of indi
                 
                 ax.plot(x+0.5, y, 'o', alpha=0.1, color='k')
                 ax.plot(xp+0.5, solution['sol'](xp+0.5), '-', color = "k", alpha = 0.1)
-            try:    
-                print (fboot, f+" max mjd in band "+b+": %f %.2f " % (maxjd+50000.0000, maxflux))
-            except:
-                pass
-      
+
+
+        print (f + " max mjd in band " + b + ": %f %.2f " %
+               (maxjd + 50000.0000, maxflux))
+
         dm15 = np.median(d15s)  # maxflux-solution['sol'](maxjd+15.0)    
-        ax.plot(lc['mjd'] + 0.5 - subtract, lc['mag'], 'o', color=mycolors[b])
-        ax.errorbar(lc['mjd'] + 0.5 - subtract, lc['mag'], yerr=lc['dmag'], 
+        medianmjdmax = np.median(mjdmaxs)
+        mjdpercentiles = np.percentile(mjdmaxs, [25,75])
+        medianmaxs = np.median(maxs)
+        maxspercentiles = np.percentile(maxs, [25,75])        
+        print(dm15, medianmjdmax, mjdpercentiles, medianmaxs, maxspercentiles)
+
+
+        ax.plot(lc['mjd'].values + 0.5 - subtract, lc['mag'].values, '.',
+                color=mycolors[b])
+        ax.errorbar(lc['mjd'].values + 0.5 - subtract, lc['mag'].values,
+                    yerr=lc['dmag'].values, 
                     fmt = 'none', ecolor=mycolors[b])
-        pl.ylim(max(lc['mag']) + 0.2, min(lc['mag']) - 0.2)            
-        pl.xlim(min(lc['mjd']) - 2 - subtract, max(lc['mjd']) + 3 - subtract)
+
+        pl.ylim(max(lc['mag'].values) + 0.2, min(lc['mag'].values) - 0.2)            
+        pl.xlim(min(lc['mjd'].values) - 2 - subtract, max(lc['mjd'].values) +
+                3 - subtract)
         ax.locator_params(tight = True, nbins = 4)
         # myplot_setlabel
         ax.set_xlabel('MJD - 50000.00')
         ax.set_ylabel(b + ' mag')  # , title = snname+' '+b, ax = ax)
-        medianmjdmax = np.median(mjdmaxs)
 
-        mjdpercentiles = np.percentile(mjdmaxs, [25,75])
+
+        fboot.write(" max mjd in band " + b + ": %f (%f, %f) %.2f (%.2f, %.2f) \n" %
+                    (maxjd,
+                     mjdpercentiles[0] + subtract,
+                     mjdpercentiles[1] + subtract,
+                     maxflux, maxspercentiles[0], maxspercentiles[1]))
+        
         
         if not isinstance(medianmjdmax, float):
             medianmjdmax = medianmjdmax[0]
 
         ax.arrow(medianmjdmax, np.median(maxs) + 0.5, 0,
                  -0.2, head_width=0.5, head_length=0.05,
-                 fc='k', ec='k')
+                 fc='r', ec='r')
         ax.plot(mjdpercentiles, [np.median(maxs) + 0.5, np.median(maxs) + 0.5],
-                'k-')
+                'r-')
         
         pl.title(" %s skip = %d use = %d" % (snname, options.sp, options.np))
-        try: 
-            if len(medianmjdmax) > 1:
+        
+        if 1: #try: 
+            if isinstance(medianmjdmax, float):
                 pl.text(0.50, 0.70, (r'$JD_\mathrm{max}$: 24%.2f (%.2f)' %
                                      (medianmjdmax + subtract + .5,
-                                      np.std(mjdmaxs))), 
-                        ha='left', fontsize=17, 
-                        transm=myfig.transFigure)
-        except:   # missing exception :-(
+                                      np.std(mjdmaxs))),
+                                     ha='left', fontsize=17, 
+                                     transform=myfig.transFigure)
+        if 1:#except:   # missing exception :-( what was I afraid of??
             pl.text(0.50, 0.70, 
-                    (r'$MJD_\mathrm{max}$: %.2f (%.2f)' % (medianmjdmax +
-                                                            subtract,
-                                                            np.std(mjdmaxs))), 
+                    (r'$MJD_\mathrm{max}$: %.2f (%.2f, %.2f)' % (medianmjdmax,
+                                                                 mjdpercentiles[0],
+                                                                 mjdpercentiles[1])),
                     ha = 'left', fontsize = 17, transform = myfig.transFigure)
 
         finaloutput.write("skipped %d used %d\n" % (options.sp, options.np))
         print ("\n\nskipped %d used %d" % (options.sp, options.np))
-        try:
-            finaloutput.write('JD_max, 24%.2f (%.2f)\n' % ((medianmjdmax +
-                                                          subtract + .5), 
-                                                         np.std(mjdmaxs)[0]))
-            finaloutput.write('MJD_max: 5%.2f %.2f\n' % ((medianmjdmax +
-                                                        np.std(mjdmaxs))[0]))
-            
-            finaloutput.write('M_max: %.2f %.2f\n' % (np.median(maxs)[0], 
-                                                     np.std(maxs)[0]))
-            print ('JD_max, 24%.2f (%.2f)' % ((medianmjdmax +
-                                               subtract + .5), 
-                                              np.std(mjdmaxs)[0]))
-            print ('MJD_max: 5%.2f %.2f ' % (medianmjdmax, 
-                                             np.std(mjdmaxs)[0]))
-            print ('M_max: %.2f %.2f ' % (np.median(maxs)[0], 
-                                          np.std(maxs)[0]))
-            
-        except:
+        if 1: #try:
+            finaloutput.write('JD_max, 24%.2f (24%.2f 24%.2f)\n' % ((medianmjdmax +
+                                                                 subtract + .5), 
+                                                                mjdpercentiles[0] + subtract + .5,
+                                                                mjdpercentiles[1] + subtract + .5))
+            finaloutput.write('MJD_max: 5%.2f (5%.2f 5%.2f) \n' % (medianmjdmax,
+                                                                   mjdpercentiles[0],
+                                                                mjdpercentiles[1]))            
+            finaloutput.write('M_max: %.2f (%.2f %.2f)\n' % (medianmaxs,
+                                                             maxspercentiles[0],
+                                                             maxspercentiles[1]))
+
+            print ('JD_max, 24%.2f (%.2f %.2f)' % ((medianmjdmax +
+                                               subtract + .5),
+                                               mjdpercentiles[0] + subtract + .5,
+                                              mjdpercentiles[1] + subtract + .5))
+            print ('MJD_max: 5%.2f %.2f %.2f' % (medianmjdmax, 
+                                              mjdpercentiles[0],  mjdpercentiles[1]))
+            print ('M_max: %.2f %.2f %.2f' % (medianmaxs, maxspercentiles[0],
+                                                             maxspercentiles[1]))
+                                                                         
+        if 1: #except:
             finaloutput.write('JD_max: 24%.2f %.2f\n' % (medianmjdmax +
                                                         subtract + .5, 
                                                         np.std(mjdmaxs)))
